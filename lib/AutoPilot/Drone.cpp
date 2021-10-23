@@ -1,38 +1,70 @@
 #include "Drone.h"
 
+t drone_status = {0, 250};
+
 /*
  * Drone Initialization
  * @param _ta Transmission Address
  * @param m_pins Motor Pins (4)
-*/
+ */
 Drone::Drone(char _ta[7], int m_pins[4])
 {
     transmissionAddress = *_ta;
     Serial.println("[TASK]:\tInitializing Drone");
 
-    int i = 0;
-    for(auto prop : propellers)
-    {
-        prop.setPin(m_pins[i]);
-        i++;
-    }
+    // for(int i = 0; i < 4; i++) {
+    //     propellers[i].setPin(m_pins[i]);
+    // }
 
-    status = new PilotStatus();
-    status->setStatusPins(22, 23, 24, 25);
-    status->setStatus(1, "YOKAI Initialized");
+    Serial.setTimeout(10);
+
+    status.setStatusPins(22, 23, 24, 25);
+    status.setStatus(7);
 }
+
+Drone::Drone() {}
 
 /*
  * This function converts the updated, digital version of the drones propeller values towards the actual, physical values on the drone.
  * 
- * Often called after a piloting update or PID change, to update the values for the copter's hardware.
-*/
+ * Often called after a piloting update or PID change, to update the values for the device's hardware.
+ */
 void Drone::update()
 {
-    for(auto prop : propellers)
-    {
-        digitalWrite(prop.pin, prop.rpm);
+    Serial.println(millis());
+
+    if (tCheck(&drone_status)) {
+        status.updateStatus();
+        tRun(&drone_status);
     }
+
+    if(Serial.available())
+    {
+        int stat = Serial.parseInt();
+        if(stat >=0 && stat <= 7) { 
+            status.setStatus(stat);
+            tRun(&drone_status);
+        }
+    }
+
+    // Drone Update Function, Run every LOOP.
+    // for(auto prop : propellers)
+    // {
+    //     digitalWrite(prop.pin, prop.rpm);
+    // }
+}
+
+bool Drone::tCheck(struct t *t) {
+  if (millis() > t->t_start + t->t_timeout) return true;    
+  return false;
+}
+
+void Drone::tRun(struct t *t) {
+    t->t_start = millis();
+}
+
+void Drone::tAlter(struct t *t, unsigned long time) {
+    t->t_timeout = time;
 }
 
 void Drone::hover()

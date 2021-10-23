@@ -1,7 +1,5 @@
 #include "Drone.h"
 #include "Location.h"
-#include <Arduino.h>
-
 class AutoPilot
 {
 	private:
@@ -24,9 +22,8 @@ class AutoPilot
 		bool activeAvoidance = false; // nac
 		
 	public:
-		AutoPilot(Drone* _drone) {	
-			drone = _drone;
-		};
+		AutoPilot(Drone* _drone) { drone = _drone; };
+		AutoPilot() {};
 
 		void update();
 		void awaitCommand() const;

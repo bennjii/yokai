@@ -1,6 +1,13 @@
 {
     "files.associations": {
         "*.x": "cpp",
-        "future": "cpp"
+        "future": "cpp",
+        "mstd_iterator": "cpp",
+        "array": "cpp",
+        "string_view": "cpp",
+        "initializer_list": "cpp",
+        "utility": "cpp",
+        "thread": "cpp",
+        "system_error": "cpp"
     }
 }

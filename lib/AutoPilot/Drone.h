@@ -2,6 +2,11 @@
 #include "Propeller.h"
 #include "PilotStatus.h"
 
+struct t {
+    unsigned long t_start;
+    unsigned long t_timeout;
+};
+
 class Target
 {
     private:
@@ -30,13 +35,19 @@ class Drone
         bool landed = true;
         bool landing = false;
         bool flying = false;
+
+        PilotStatus status;
+
+        // Task Schedulers
+        bool tCheck(struct t *t);
+        void tRun(struct t *t);
+        void tAlter(struct t *t, unsigned long t_timeout);
     
     public:
         // Takes transmission address
         Drone(char _transmissionAddress[7], int _motor_pins[4]); 
+        Drone();
 
-        PilotStatus *status;
-        
         // Template Props
         Propeller propellers[4] = {
             Propeller(0, 5), // Location 0, pin 5 

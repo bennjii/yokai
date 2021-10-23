@@ -138,9 +138,7 @@ void AutoPilot::setAltitude(float _altitude)
  */
 void AutoPilot::update()
 {
-    // MAKE SURE NOT TO OVERRITE CHANGES PREVIOUSLY MADE BY OTHER COMMANDS 
-    // -> THIS SHOULD DO CURRENT CALCULATIONS OR BE SKIPPED;
-    return;
+    drone->update();
 
     // for(Propeller prop : drone->propellers) {
     //     // Set RPM to whatever will reach destination...

@@ -13,19 +13,18 @@ class PilotStatus
          * Warning:         4 (Orange Hold)
          * Error:           5 (Red Hold)
          * Immediate:       6 (Red Repeated Blink 1s Interval)
-         * Operational      7 (No Colour)
-        */
-        int status = 0;
+         * Operational      7 (Purple)
+         */
 
-        int r_pin;
-        int g_pin;
-        int b_pin;
-        int pow_pin;
 
-    public: 
-        PilotStatus();
+    public:
+        PilotStatus() {};
+
+        unsigned long blink_time = 0;
 
         bool setStatusPins(int r_pin, int g_pin, int b_pin, int pow_pin);
-        bool setStatus(int status, String message);
+        void runSwitch(int led_state, int led_status);
+        void updateStatus();
+        bool setStatus(int status);
         int getStatus();
 };
