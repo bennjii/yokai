@@ -1,10 +1,27 @@
 #include "Location.h"
 #include "Propeller.h"
 #include "PilotStatus.h"
+// #include <ArduinoSTL.h>
 
+
+/*
+ * Time Scheduler
+ * 
+ * @param t_start unsigned long; Defines the time last or first instantiated for the task
+ * @param t_timeout unsigned long; Defines the duration between or till action call
+ * @param t_volatile boolean; Should the call be restacked (t/f)
+ * @param t_back void; Function Completion Callback
+ */
 struct t {
     unsigned long t_start;
     unsigned long t_timeout;
+    bool t_volatile;
+    // std::function<bool(int)> t_back;
+
+    // Task Schedulers
+    void tAlter(unsigned long t_timeout);
+    bool tCheck();
+    void tRun();
 };
 
 class Target
@@ -38,11 +55,8 @@ class Drone
 
         PilotStatus status;
 
-        // Task Schedulers
-        bool tCheck(struct t *t);
-        void tRun(struct t *t);
-        void tAlter(struct t *t, unsigned long t_timeout);
-    
+        // std::vector<t> tasks;
+
     public:
         // Takes transmission address
         Drone(char _transmissionAddress[7], int _motor_pins[4]); 

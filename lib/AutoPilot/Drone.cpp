@@ -1,6 +1,6 @@
 #include "Drone.h"
 
-t drone_status = {0, 250};
+t drone_status = { 0, 250, false };
 
 /*
  * Drone Initialization
@@ -25,17 +25,36 @@ Drone::Drone(char _ta[7], int m_pins[4])
 Drone::Drone() {}
 
 /*
- * This function converts the updated, digital version of the drones propeller values towards the actual, physical values on the drone.
+ * aprox. 16runs / ms in std.arduino.clockcycle
+ * Function Run cyclically. 
+ * Should not be called >1 per loop, or outside of loop.
  * 
- * Often called after a piloting update or PID change, to update the values for the device's hardware.
+ * If AutoPilot is included, run secondary to pilot update.
  */
 void Drone::update()
 {
-    Serial.println(millis());
+    // Run any queued tasks in tTaskManager
+    // for(size_t i = 0; i < tasks.size(); i++)
+    // {
+    //     // Verify Function SHOULD be run.
+    //     if(tasks[i].tCheck()) {
+    //         // Execute Function
+    //         // tasks[i].t_back();
 
-    if (tCheck(&drone_status)) {
+    //         // Propogate Run Changes
+    //         tasks[i].tRun();
+
+    //         // Remove tasks as neccesary
+    //         if(tasks[i].t_volatile) {
+    //             tasks.erase(i);
+    //         } 
+    //     }
+    // }
+
+    // START - Status DEMO
+    if (drone_status.tCheck()) {
         status.updateStatus();
-        tRun(&drone_status);
+        drone_status.tRun();
     }
 
     if(Serial.available())
@@ -43,9 +62,11 @@ void Drone::update()
         int stat = Serial.parseInt();
         if(stat >=0 && stat <= 7) { 
             status.setStatus(stat);
-            tRun(&drone_status);
+            drone_status.tRun();
         }
     }
+
+    // END - Status Demo
 
     // Drone Update Function, Run every LOOP.
     // for(auto prop : propellers)
@@ -54,17 +75,17 @@ void Drone::update()
     // }
 }
 
-bool Drone::tCheck(struct t *t) {
-  if (millis() > t->t_start + t->t_timeout) return true;    
+bool t::tCheck() {
+  if (millis() > t_start + t_timeout) return true;    
   return false;
 }
 
-void Drone::tRun(struct t *t) {
-    t->t_start = millis();
+void t::tRun() {
+    t_start = millis();
 }
 
-void Drone::tAlter(struct t *t, unsigned long time) {
-    t->t_timeout = time;
+void t::tAlter(unsigned long time) {
+    t_timeout = time;
 }
 
 void Drone::hover()
