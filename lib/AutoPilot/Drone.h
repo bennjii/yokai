@@ -1,8 +1,8 @@
 #include "Location.h"
 #include "Propeller.h"
 #include "PilotStatus.h"
+#include <Arduino_LSM9DS1.h>
 // #include <ArduinoSTL.h>
-
 
 /*
  * Time Scheduler
@@ -37,9 +37,27 @@ class Target
 };
 
 /*
- * Drone Class
-*/
-
+ * [YOKAI] ~ 2021
+ * 
+ * (A↻) (B↺)                
+ *    \ /             y       z (vertical)
+ *    |+|             \     ↑
+ *    |-|               _  |
+ *    / \              \+\
+ * (C↺) (D↻)           \-\  ----→ x (horisontal left-right)
+ *                       ‾
+ *                     
+ * Motors A & D run clockwise.
+ * Motors B & C run counter-clockwise.
+ * 
+ * Board: [+-] 
+ *      + indicates BLE sensor (Board Front)  
+ *      - indicates USB port (Board Rear)
+ * 
+ * The z axis is vertical to the horisontal plane of the board  ~>  up/down.
+ * The y axis indicates forward and backward as proportional to the board +/-   ~>   forward/backward.
+ * The x axis is perpendicular to the y axis and indicates movements  ~>  left/right.
+ */
 class Drone
 { 
     private:
@@ -52,6 +70,15 @@ class Drone
         bool landed = true;
         bool landing = false;
         bool flying = false;
+
+        // Accelerometer    X, Y, Z Direction
+        
+
+        // Gyroscope        X, Y, Z Direction
+        float gx, gy, gz;
+
+        // Magnetometer     X, Y, Z Direction
+        float mx, my, mz;
 
         PilotStatus status;
 
@@ -74,6 +101,8 @@ class Drone
         void setAllPropellerSpeeds(const int rpm) const;
     
         Location getLocation() const;
+
+        bool updateAcceleration();
 
         float getVelocity() const;
         float getAltitude() const;

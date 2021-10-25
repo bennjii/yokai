@@ -1,6 +1,11 @@
 #include "Drone.h"
 
 t drone_status = { 0, 250, false };
+t acel_update = { 0, 1, false };
+
+float ax;
+float ay;
+float az;
 
 /*
  * Drone Initialization
@@ -16,9 +21,20 @@ Drone::Drone(char _ta[7], int m_pins[4])
     //     propellers[i].setPin(m_pins[i]);
     // }
 
+    if (!IMU.begin()) {
+        Serial.println("Failed to initialize IMU!");
+        status.setStatus(5);
+        while(1);
+    }
+
+    // Recieve 10ms of information MAXIMUM,
+    // Reduced delay timeout when awating packet fufilment
     Serial.setTimeout(10);
 
+    // 22 - R,     23 - G,     24 - B,     25 - POW
     status.setStatusPins(22, 23, 24, 25);
+
+    // Set Status - Operational
     status.setStatus(7);
 }
 
@@ -33,6 +49,46 @@ Drone::Drone() {}
  */
 void Drone::update()
 {
+    if (acel_update.tCheck()) {
+        updateAcceleration();
+        acel_update.tRun();
+    }
+
+    Serial.println("");
+    Serial.println("");
+    Serial.println("");
+    Serial.println("");
+    Serial.println("");
+    Serial.println("");
+
+
+    int degreesX = 0;
+    int degreesY = 0;
+
+    if (ax > 0.1) {
+        Serial.print("U");
+
+        degreesX = map(100 * ax, 0, 97, 0, 90);
+    }else if (ax < -0.1) {
+        Serial.print("D");
+    
+        degreesX = map(100 * ax, 0, -100, 0, 90);
+    }
+
+    if (ay > 0.1) {
+        Serial.print("L");
+
+        degreesY = map(100 * ay, 0, 97, 0, 90);
+    }else if (ay < -0.1) {
+        Serial.print("R");
+
+        degreesY = map(100 * ay, 0, -100, 0, 90);
+    }
+
+    Serial.print("↑ "); Serial.println(degreesX);
+    Serial.print("↻ "); Serial.println(degreesY);
+    Serial.println("");
+
     // Run any queued tasks in tTaskManager
     // for(size_t i = 0; i < tasks.size(); i++)
     // {
@@ -57,14 +113,14 @@ void Drone::update()
         drone_status.tRun();
     }
 
-    if(Serial.available())
-    {
-        int stat = Serial.parseInt();
-        if(stat >=0 && stat <= 7) { 
-            status.setStatus(stat);
-            drone_status.tRun();
-        }
-    }
+    // if(Serial.available())
+    // {
+    //     int stat = Serial.parseInt();
+    //     if(stat >=0 && stat <= 7) { 
+    //         status.setStatus(stat);
+    //         drone_status.tRun();
+    //     }
+    // }
 
     // END - Status Demo
 
@@ -75,15 +131,25 @@ void Drone::update()
     // }
 }
 
+/*
+ * Checks if task should be run (boolean response)
+ */
 bool t::tCheck() {
   if (millis() > t_start + t_timeout) return true;    
   return false;
 }
 
+/*
+ * Should be called after task complete. (void)
+ */
 void t::tRun() {
     t_start = millis();
 }
 
+/*
+ * Change timeout duration of task
+ * @param time new timeout in ms (unsigned long)
+ */
 void t::tAlter(unsigned long time) {
     t_timeout = time;
 }
@@ -116,6 +182,14 @@ void Drone::setAllPropellerSpeeds(const int _rpm) const {
     {
         prop.setPropellerSpeed(_rpm);
     }
+}
+
+bool Drone::updateAcceleration() {
+    if (IMU.accelerationAvailable()) {
+        IMU.readAcceleration(ax, ay, az);
+    }
+
+    return true;
 }
 
 float Drone::getVelocity() const {
