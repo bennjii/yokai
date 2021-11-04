@@ -71,14 +71,14 @@ class Drone
         bool landing = false;
         bool flying = false;
 
-        // Accelerometer    X, Y, Z Direction
-        
+        // Accelerometer    X, Y, Z Direction (m/s)
+        // float ax, ay, az;
 
-        // Gyroscope        X, Y, Z Direction
-        float gx, gy, gz;
+        // Gyroscope        X, Y, Z Direction (rpm)
+        // float gx, gy, gz;
 
-        // Magnetometer     X, Y, Z Direction
-        float mx, my, mz;
+        // Magnetometer     X, Y, Z Direction (gauss)
+        // float mx, my, mz;
 
         PilotStatus status;
 
@@ -101,13 +101,15 @@ class Drone
         void setAllPropellerSpeeds(const int rpm) const;
     
         Location getLocation() const;
-
+        
+        bool updateMagnetometer();
         bool updateAcceleration();
+        bool updateGyrosphere();
 
         float getVelocity() const;
         float getAltitude() const;
         float getBearing() const;
-
+        
         float getPitch() const;
         float getRoll() const;
         float getYaw() const;

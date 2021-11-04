@@ -2,10 +2,12 @@
 
 t drone_status = { 0, 250, false };
 t acel_update = { 0, 1, false };
+t gyro_update = { 0, 1, false };
+t magn_update = { 0, 1, false };
 
-float ax;
-float ay;
-float az;
+float ax, ay, az;
+float gx, gy, gz;
+float mx, my, mz;
 
 /*
  * Drone Initialization
@@ -40,6 +42,10 @@ Drone::Drone(char _ta[7], int m_pins[4])
 
 Drone::Drone() {}
 
+long start_time = micros();
+long running_avg = 0;
+size_t runs = 0;
+
 /*
  * aprox. 16runs / ms in std.arduino.clockcycle
  * Function Run cyclically. 
@@ -49,45 +55,27 @@ Drone::Drone() {}
  */
 void Drone::update()
 {
+    long time = micros() - start_time;
+    double scaling = 1. / (double)(runs + 1);
+    running_avg = time * scaling + running_avg * (1. - scaling);
+    runs++;
+
+    start_time = micros();
+
     if (acel_update.tCheck()) {
         updateAcceleration();
         acel_update.tRun();
     }
 
-    Serial.println("");
-    Serial.println("");
-    Serial.println("");
-    Serial.println("");
-    Serial.println("");
-    Serial.println("");
-
-
-    int degreesX = 0;
-    int degreesY = 0;
-
-    if (ax > 0.1) {
-        Serial.print("U");
-
-        degreesX = map(100 * ax, 0, 97, 0, 90);
-    }else if (ax < -0.1) {
-        Serial.print("D");
-    
-        degreesX = map(100 * ax, 0, -100, 0, 90);
+    if (gyro_update.tCheck()) {
+        updateGyrosphere();
+        gyro_update.tRun();
     }
 
-    if (ay > 0.1) {
-        Serial.print("L");
-
-        degreesY = map(100 * ay, 0, 97, 0, 90);
-    }else if (ay < -0.1) {
-        Serial.print("R");
-
-        degreesY = map(100 * ay, 0, -100, 0, 90);
+    if (magn_update.tCheck()) {
+        updateMagnetometer();
+        magn_update.tRun();
     }
-
-    Serial.print("↑ "); Serial.println(degreesX);
-    Serial.print("↻ "); Serial.println(degreesY);
-    Serial.println("");
 
     // Run any queued tasks in tTaskManager
     // for(size_t i = 0; i < tasks.size(); i++)
@@ -96,10 +84,10 @@ void Drone::update()
     //     if(tasks[i].tCheck()) {
     //         // Execute Function
     //         // tasks[i].t_back();
-
+    //
     //         // Propogate Run Changes
     //         tasks[i].tRun();
-
+    //
     //         // Remove tasks as neccesary
     //         if(tasks[i].t_volatile) {
     //             tasks.erase(i);
@@ -110,6 +98,10 @@ void Drone::update()
     // START - Status DEMO
     if (drone_status.tCheck()) {
         status.updateStatus();
+
+        Serial.print("\tavg\t"); Serial.print(running_avg); 
+        Serial.print("\tin \tms"); Serial.println((double) time / 1000);
+
         drone_status.tRun();
     }
 
@@ -154,6 +146,41 @@ void t::tAlter(unsigned long time) {
     t_timeout = time;
 }
 
+float Drone::getPitch() const
+{
+    // if (ax > 0.1) {
+    //     Serial.print("U");
+
+    //     return map(100 * ax, 0, 97, 0, 90);
+    // }else if (ax < -0.1) {
+    //     Serial.print("D");
+    
+    //     return map(100 * ax, 0, -100, 0, 90);
+    // }
+
+    return 180 * atan(ax / sqrt(ay*ay + az*az)) / PI;
+}
+
+float Drone::getRoll() const
+{
+    // if (ay > 0.1) {
+    //     Serial.print("L");
+
+    //     return map(100 * ay, 0, 97, 0, 90);
+    // }else if (ay < -0.1) {
+    //     Serial.print("R");
+
+    //     return map(100 * ay, 0, -100, 0, 90);
+    // }
+
+    return 180 * atan(ay /sqrt(ax*ax + az*az)) / PI;
+}
+
+float Drone::getYaw() const
+{
+    return 180 * atan(az / sqrt(ax*ax + az*az)) / PI;
+}
+
 void Drone::hover()
 {
     hovering = true;
@@ -162,7 +189,6 @@ void Drone::hover()
 void Drone::land()
 {
     // do all calculations for landing...
-    
 }
 
 Location Drone::getLocation() const
@@ -187,6 +213,22 @@ void Drone::setAllPropellerSpeeds(const int _rpm) const {
 bool Drone::updateAcceleration() {
     if (IMU.accelerationAvailable()) {
         IMU.readAcceleration(ax, ay, az);
+    }
+
+    return true;
+}
+
+bool Drone::updateGyrosphere() {
+    if (IMU.gyroscopeAvailable()) {
+        return IMU.readGyroscope(gx, gy, gz);
+    }
+
+    return true;
+}
+
+bool Drone::updateMagnetometer() {
+    if (IMU.magneticFieldAvailable()) {
+        return IMU.readMagneticField(mx, my, mz);
     }
 
     return true;
