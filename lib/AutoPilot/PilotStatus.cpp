@@ -57,6 +57,13 @@ void PilotStatus::runSwitch(int led_state, int led_status)
             digitalWrite(r_pin, led_state ? HIGH : LOW);
 
             break;
+        case 8:
+            digitalWrite(r_pin, led_state ? HIGH : LOW);
+            digitalWrite(b_pin, led_state ? LOW : HIGH);
+
+            blink_period = 1000;
+            
+            break;
         default:
             Serial.print(led_status);
             Serial.print("  -  ");

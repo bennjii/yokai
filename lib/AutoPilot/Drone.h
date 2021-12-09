@@ -1,7 +1,9 @@
 #include "Location.h"
 #include "Propeller.h"
 #include "PilotStatus.h"
+
 #include <Arduino_LSM9DS1.h>
+#include <ArduinoBLE.h>
 // #include <ArduinoSTL.h>
 
 /*
@@ -61,7 +63,8 @@ class Target
 class Drone
 { 
     private:
-        char transmissionAddress;
+        const char* deviceServiceUuid;
+        const char* deviceServiceCharacteristicUuid;
 
         Location *location;
         Target target;
@@ -86,7 +89,7 @@ class Drone
 
     public:
         // Takes transmission address
-        Drone(char _transmissionAddress[7], int _motor_pins[4]); 
+        Drone(const char* _remote_address, const char* _characteristic, int _motor_pins[4]); 
         Drone();
 
         // Template Props
@@ -101,6 +104,8 @@ class Drone
         void setAllPropellerSpeeds(const int rpm) const;
     
         Location getLocation() const;
+
+        void connectToPeripheral();
         
         bool updateMagnetometer();
         bool updateAcceleration();
@@ -119,4 +124,7 @@ class Drone
         void update();
         void hover();
         void land();
+
+        int readCharacteristicValue(BLECharacteristic characteristic);
+        int readCharacteristic(BLECharacteristic characteristic, int prev_value);
 };

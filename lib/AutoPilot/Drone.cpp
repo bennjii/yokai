@@ -1,22 +1,40 @@
 #include "Drone.h"
 
 t drone_status = { 0, 250, false };
-t acel_update = { 0, 1, false };
-t gyro_update = { 0, 1, false };
-t magn_update = { 0, 1, false };
+t acel_update = { 0, 3, false };
+t gyro_update = { 1, 3, false };
+t magn_update = { 2, 3, false };
+t t_update = { 0, 100, false };
+t bt_update = { 0, 1, false };
 
 float ax, ay, az;
 float gx, gy, gz;
 float mx, my, mz;
+
+int throttle = 0;
+int yaw = 0;
+int roll = 0;
+int pitch = 0;
+
+bool connected = false;
+bool idle = true;
+
+BLEService positionService("19b10000-e8f2-537e-4f6c-d104768a1214"); 
+BLECharacteristic throttleCharacteristic("eb1e2061-c554-4307-9309-94144c5c09b1", BLERead | BLEWrite | BLENotify, 4);
+BLECharacteristic yawCharacteristic("42ebfd9a-0faf-40f2-b03a-aaba86a90c18", BLERead | BLEWrite | BLENotify, 4);
+BLECharacteristic rollCharacteristic("ee05112e-d0dd-44c9-be7a-3a04f57c2640", BLERead | BLEWrite | BLENotify, 4);
+BLECharacteristic pitchCharacteristic("237f9fba-52c5-4e23-826d-d3f7581c5e4c", BLERead | BLEWrite | BLENotify, 4);
 
 /*
  * Drone Initialization
  * @param _ta Transmission Address
  * @param m_pins Motor Pins (4)
  */
-Drone::Drone(char _ta[7], int m_pins[4])
+Drone::Drone(const char* _ta, const char* ch, int m_pins[4])
 {
-    transmissionAddress = *_ta;
+    deviceServiceUuid = _ta;
+    deviceServiceCharacteristicUuid = ch;
+
     Serial.println("[TASK]:\tInitializing Drone");
 
     // for(int i = 0; i < 4; i++) {
@@ -24,10 +42,30 @@ Drone::Drone(char _ta[7], int m_pins[4])
     // }
 
     if (!IMU.begin()) {
-        Serial.println("Failed to initialize IMU!");
+        Serial.println("[ERR]: Error initializing IMU sensor failed!");
         status.setStatus(5);
         while(1);
     }
+
+    if (!BLE.begin()) {
+        Serial.println("[ERR]: Error initializing BLE module failed!");
+        while (1);
+    }
+
+    BLE.setLocalName("YOKAI"); 
+    BLE.setDeviceName("YOKAI");
+
+    BLEService connectionService(deviceServiceUuid); 
+
+    BLE.setAdvertisedService(positionService);
+    positionService.addCharacteristic(throttleCharacteristic);
+    positionService.addCharacteristic(yawCharacteristic);
+    positionService.addCharacteristic(rollCharacteristic);
+    positionService.addCharacteristic(pitchCharacteristic);
+
+    BLE.addService(positionService);
+    
+    BLE.advertise();
 
     // Recieve 10ms of information MAXIMUM,
     // Reduced delay timeout when awating packet fufilment
@@ -55,12 +93,78 @@ size_t runs = 0;
  */
 void Drone::update()
 {
-    long time = micros() - start_time;
-    double scaling = 1. / (double)(runs + 1);
-    running_avg = time * scaling + running_avg * (1. - scaling);
-    runs++;
+    // long time = micros() - start_time;
+    // double scaling = 1. / (double)(runs + 1);
+    // running_avg = time * scaling + running_avg * (1. - scaling);
+    // runs++;
 
-    start_time = micros();
+    // start_time = micros();
+
+    /*
+        BLE VALUES
+        
+        Externally Controlled
+            Left Stick (Default 0'd)
+            - Trottle (Right Stick Up & Down) +ve only
+            - Yaw (Rudder - Left Stick Left & Right) +ve and -ve
+
+            Right Stick (Default Centered)
+            - Roll (Right Stick Left & Right) +ve and -ve
+            - Elevator (Left Stick Up & Down) +ve and -ve (climb and fall)
+
+        Externally Viewed
+            - Velocity (X,Y,Z)
+            - Acellerometer (X,Y,Z)
+            - Motor RPM's (1,2,3,4)
+
+    Actions:
+                Raise                           Forward
+                  |                                |
+    Spin Left   -[|]-  Spin Right   Shift Left   -[|]-   Shift Right
+                  |                                |
+                Lower                           Backward
+
+    Programation:
+             Throttle Up                        Pitch Up
+                  |                                |
+    Yaw Left    -[|]-  Yaw Right     Roll Left   -[|]-   Roll Right
+                  |                                |
+             Throttle Down                      Pitch Down
+    */
+
+    BLEDevice central = BLE.central();
+
+    if(bt_update.tCheck()) { 
+        if(central && central.connected()) {
+            status.setStatus(3);
+            connected = true;
+
+            throttle = readCharacteristic(throttleCharacteristic, throttle);
+            yaw = readCharacteristic(yawCharacteristic, yaw);
+            roll = readCharacteristic(rollCharacteristic, roll);
+            pitch = readCharacteristic(pitchCharacteristic, pitch);
+
+            idle = false;
+        } else {
+            connected = false;
+            // Drone is NOT connected to external control authority - app.
+            status.setStatus(8);
+        }
+
+        bt_update.tRun();
+    }
+
+    if(t_update.tCheck()) { 
+        Serial.print(throttle);
+        Serial.print("\t");
+        Serial.print(yaw);
+        Serial.print("\t");
+        Serial.print(roll);
+        Serial.print("\t");
+        Serial.print(pitch);
+        Serial.println("");
+        t_update.tRun();
+    }
 
     if (acel_update.tCheck()) {
         updateAcceleration();
@@ -96,30 +200,13 @@ void Drone::update()
     // }
 
     // START - Status DEMO
-    if (drone_status.tCheck()) {
-        status.updateStatus();
+    // if (drone_status.tCheck()) {
+    //     status.updateStatus();
 
-        Serial.print("\tavg\t"); Serial.print(running_avg); 
-        Serial.print("\tin \tms"); Serial.println((double) time / 1000);
+    //     Serial.print("\tavg\t"); Serial.print(running_avg); 
+    //     Serial.print("\tin \tms"); Serial.println((double) time / 1000);
 
-        drone_status.tRun();
-    }
-
-    // if(Serial.available())
-    // {
-    //     int stat = Serial.parseInt();
-    //     if(stat >=0 && stat <= 7) { 
-    //         status.setStatus(stat);
-    //         drone_status.tRun();
-    //     }
-    // }
-
-    // END - Status Demo
-
-    // Drone Update Function, Run every LOOP.
-    // for(auto prop : propellers)
-    // {
-    //     digitalWrite(prop.pin, prop.rpm);
+    //     drone_status.tRun();
     // }
 }
 
@@ -144,6 +231,32 @@ void t::tRun() {
  */
 void t::tAlter(unsigned long time) {
     t_timeout = time;
+}
+
+int Drone::readCharacteristicValue(BLECharacteristic characteristic) {
+    uint8_t value[4] = {};
+    int res = 0;
+
+    characteristic.readValue(value, 4);
+
+    for(int i = 0; i< 4; i++) {
+        int val = (int)value[i] - '0';
+
+        if(val >= 0) {
+            res *= 10;
+            res += val;
+        }
+    }
+
+    return res;
+}
+
+int Drone::readCharacteristic(BLECharacteristic characteristic, int prev_value) {
+    if (characteristic.written()) {
+        return readCharacteristicValue(characteristic) - 200;
+    }else {
+        return prev_value;
+    }
 }
 
 float Drone::getPitch() const
@@ -207,6 +320,27 @@ void Drone::setAllPropellerSpeeds(const int _rpm) const {
     for(auto prop : propellers)
     {
         prop.setPropellerSpeed(_rpm);
+    }
+}
+
+void Drone::connectToPeripheral() {
+    BLEDevice peripheral;
+
+    do {
+        BLE.scanForUuid(deviceServiceUuid);
+        peripheral = BLE.available();
+    } while (!peripheral);
+        
+    if (peripheral) {
+        Serial.println("* Peripheral device found!");
+        Serial.print("* Device MAC address: ");
+        Serial.println(peripheral.address());
+        Serial.print("* Device name: ");
+        Serial.println(peripheral.localName());
+        Serial.print("* Advertised service UUID: ");
+        Serial.println(peripheral.advertisedServiceUuid());
+        Serial.println(" ");
+        BLE.stopScan();
     }
 }
 

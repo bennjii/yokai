@@ -14,6 +14,7 @@ class PilotStatus
          * Error:           5 (Red Hold)
          * Immediate:       6 (Red Repeated Blink 1s Interval)
          * Operational      7 (Purple)
+         * Not Connected    8 (Red & Blue Alternate)
          */
 
 
