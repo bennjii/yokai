@@ -7,14 +7,21 @@ t magn_update = { 2, 3, false };
 t t_update = { 0, 100, false };
 t bt_update = { 0, 1, false };
 
+const int MAX_THROTTLE = 1600;
+const int MIN_THROTTLE = 1000;
+
 float ax, ay, az;
 float gx, gy, gz;
 float mx, my, mz;
 
 int throttle = 0;
-int yaw = 0;
-int roll = 0;
-int pitch = 0;
+int target_x = 0;
+int target_y = 0;
+int target_z = 0;
+
+PID pidx(6, 0.1, 1.5, 100, 100, 100);
+PID pidy(6, 0.1, 1.5, 100, 100, 100);
+PID pidz(8, 0.0, 0.0, 50, 50, 50);
 
 bool connected = false;
 bool idle = true;
@@ -84,6 +91,10 @@ long start_time = micros();
 long running_avg = 0;
 size_t runs = 0;
 
+
+unsigned long new_time = 0;
+unsigned long cur_time = 0;
+
 /*
  * aprox. 16runs / ms in std.arduino.clockcycle
  * Function Run cyclically. 
@@ -91,45 +102,43 @@ size_t runs = 0;
  * 
  * If AutoPilot is included, run secondary to pilot update.
  */
+
 void Drone::update()
 {
-    // long time = micros() - start_time;
-    // double scaling = 1. / (double)(runs + 1);
-    // running_avg = time * scaling + running_avg * (1. - scaling);
-    // runs++;
-
-    // start_time = micros();
+    new_time = micros();
+    float time_passed = (new_time - cur_time) / 1000000.0;
+    cur_time = new_time;
 
     /*
-        BLE VALUES
-        
-        Externally Controlled
-            Left Stick (Default 0'd)
-            - Trottle (Right Stick Up & Down) +ve only
-            - Yaw (Rudder - Left Stick Left & Right) +ve and -ve
+                    BLE VALUES
+                    
+                    Externally Controlled
+                        Left Stick (Default 0'd)
+                        - Trottle (Right Stick Up & Down) +ve only
+                        - Yaw (Rudder - Left Stick Left & Right) +ve and -ve
 
-            Right Stick (Default Centered)
-            - Roll (Right Stick Left & Right) +ve and -ve
-            - Elevator (Left Stick Up & Down) +ve and -ve (climb and fall)
+                        Right Stick (Default Centered)
+                        - Roll (Right Stick Left & Right) +ve and -ve
+                        - Elevator (Left Stick Up & Down) +ve and -ve (climb and fall)
 
-        Externally Viewed
-            - Velocity (X,Y,Z)
-            - Acellerometer (X,Y,Z)
-            - Motor RPM's (1,2,3,4)
+                    Externally Viewed
+                        - Velocity (X,Y,Z)
+                        - Acellerometer (X,Y,Z)
+                        - Motor RPM's (1,2,3,4)
 
-    Actions:
-                Raise                           Forward
-                  |                                |
-    Spin Left   -[|]-  Spin Right   Shift Left   -[|]-   Shift Right
-                  |                                |
-                Lower                           Backward
+                Actions:
+                            Raise                           Forward
+                              |                                |
+                Spin Left   -[|]-  Spin Right   Shift Left   -[|]-   Shift Right
+                              |                                |
+                            Lower                           Backward
 
-    Programation:
-             Throttle Up                        Pitch Up
-                  |                                |
-    Yaw Left    -[|]-  Yaw Right     Roll Left   -[|]-   Roll Right
-                  |                                |
-             Throttle Down                      Pitch Down
+                Programation:
+                        Throttle Up                        Pitch Up
+                              |                                |
+                Yaw Left    -[|]-  Yaw Right     Roll Left   -[|]-   Roll Right
+                              |                                |
+                        Throttle Down                      Pitch Down
     */
 
     BLEDevice central = BLE.central();
@@ -140,9 +149,9 @@ void Drone::update()
             connected = true;
 
             throttle = readCharacteristic(throttleCharacteristic, throttle);
-            yaw = readCharacteristic(yawCharacteristic, yaw);
-            roll = readCharacteristic(rollCharacteristic, roll);
-            pitch = readCharacteristic(pitchCharacteristic, pitch);
+            target_x = readCharacteristic(rollCharacteristic, target_x);
+            target_y = readCharacteristic(pitchCharacteristic, target_y);
+            target_z = readCharacteristic(yawCharacteristic, target_z);
 
             idle = false;
         } else {
@@ -155,14 +164,30 @@ void Drone::update()
     }
 
     if(t_update.tCheck()) { 
-        Serial.print(throttle);
-        Serial.print("\t");
-        Serial.print(yaw);
-        Serial.print("\t");
-        Serial.print(roll);
-        Serial.print("\t");
-        Serial.print(pitch);
-        Serial.println("");
+        // Serial.print(throttle);
+        // Serial.print("\t");
+        // Serial.print(yaw);
+        // Serial.print("\t");
+        // Serial.print(roll);
+        // Serial.print("\t");
+        // Serial.print(pitch);
+        // Serial.println("");
+        
+
+        // Recieved data from BLE, stored as target_(x,y,z)
+        
+
+        // 1. Calculate PID Gains
+        float gain_x = pidx.gain(time_passed, (ax - target_x), gx, throttle > 1200);
+        float gain_y = pidy.gain(time_passed, (ay - target_y), gy, throttle > 1200);
+        float gain_z = pidz.gain(time_passed, (az - target_z), gz, throttle > 1200);
+
+        // 2. Write to Motors
+        for(auto prop : propellers) {
+            prop.setPropellerSpeed(limit(throttle) + ((prop.location % 2 == 0) ? gain_y : gain_x) - gain_z);
+        }
+
+
         t_update.tRun();
     }
 
@@ -199,15 +224,7 @@ void Drone::update()
     //     }
     // }
 
-    // START - Status DEMO
-    // if (drone_status.tCheck()) {
-    //     status.updateStatus();
 
-    //     Serial.print("\tavg\t"); Serial.print(running_avg); 
-    //     Serial.print("\tin \tms"); Serial.println((double) time / 1000);
-
-    //     drone_status.tRun();
-    // }
 }
 
 /*
@@ -231,6 +248,12 @@ void t::tRun() {
  */
 void t::tAlter(unsigned long time) {
     t_timeout = time;
+}
+
+int Drone::limit(int t) {
+    if(t > MAX_THROTTLE) return MAX_THROTTLE;
+    else if(t < MIN_THROTTLE) return MIN_THROTTLE;
+    else return t;
 }
 
 int Drone::readCharacteristicValue(BLECharacteristic characteristic) {

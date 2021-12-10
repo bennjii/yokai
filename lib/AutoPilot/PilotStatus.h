@@ -1,5 +1,4 @@
 #include <Arduino.h>
-
 class PilotStatus
 { 
     private: 

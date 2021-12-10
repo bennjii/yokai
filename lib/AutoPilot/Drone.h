@@ -1,4 +1,5 @@
 #include "Location.h"
+#include "PID.h"
 #include "Propeller.h"
 #include "PilotStatus.h"
 
@@ -124,6 +125,8 @@ class Drone
         void update();
         void hover();
         void land();
+
+        int limit(int t);
 
         int readCharacteristicValue(BLECharacteristic characteristic);
         int readCharacteristic(BLECharacteristic characteristic, int prev_value);
