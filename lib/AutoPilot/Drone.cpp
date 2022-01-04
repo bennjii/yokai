@@ -13,6 +13,7 @@ const int MIN_THROTTLE = 1000;
 float ax, ay, az;
 float gx, gy, gz;
 float mx, my, mz;
+float vx, vy, vz;
 
 int throttle = 0;
 int target_x = 0;
@@ -25,6 +26,14 @@ PID pidz(8, 0.0, 0.0, 50, 50, 50);
 
 bool connected = false;
 bool idle = true;
+
+/*
+
+    Services
+        - Characteristics
+            - Descriptors
+
+*/
 
 BLEService positionService("19b10000-e8f2-537e-4f6c-d104768a1214"); 
 BLECharacteristic throttleCharacteristic("eb1e2061-c554-4307-9309-94144c5c09b1", BLERead | BLEWrite | BLENotify, 4);
@@ -51,11 +60,12 @@ Drone::Drone(const char* _ta, const char* ch, int m_pins[4])
     if (!IMU.begin()) {
         Serial.println("[ERR]: Error initializing IMU sensor failed!");
         status.setStatus(5);
-        while(1);
+        while (1);
     }
 
     if (!BLE.begin()) {
         Serial.println("[ERR]: Error initializing BLE module failed!");
+        status.setStatus(5);
         while (1);
     }
 
@@ -91,7 +101,6 @@ long start_time = micros();
 long running_avg = 0;
 size_t runs = 0;
 
-
 unsigned long new_time = 0;
 unsigned long cur_time = 0;
 
@@ -106,25 +115,27 @@ unsigned long cur_time = 0;
 void Drone::update()
 {
     new_time = micros();
-    float time_passed = (new_time - cur_time) / 1000000.0;
+    double delta_time = new_time - cur_time;
+    double time_passed = delta_time / 1000000;
+    // Serial.print(delta_time); Serial.print("\t"); Serial.println(time_passed, 6);
     cur_time = new_time;
 
     /*
-                    BLE VALUES
-                    
-                    Externally Controlled
-                        Left Stick (Default 0'd)
-                        - Trottle (Right Stick Up & Down) +ve only
-                        - Yaw (Rudder - Left Stick Left & Right) +ve and -ve
+        BLE VALUES
+        
+        Externally Controlled
+            Left Stick (Default 0'd)
+            - Trottle (Right Stick Up & Down) +ve only
+            - Yaw (Rudder - Left Stick Left & Right) +ve and -ve
 
-                        Right Stick (Default Centered)
-                        - Roll (Right Stick Left & Right) +ve and -ve
-                        - Elevator (Left Stick Up & Down) +ve and -ve (climb and fall)
+            Right Stick (Default Centered)
+            - Roll (Right Stick Left & Right) +ve and -ve
+            - Elevator (Left Stick Up & Down) +ve and -ve (climb and fall)
 
-                    Externally Viewed
-                        - Velocity (X,Y,Z)
-                        - Acellerometer (X,Y,Z)
-                        - Motor RPM's (1,2,3,4)
+        Externally Viewed
+            - Velocity (X,Y,Z)
+            - Acellerometer (X,Y,Z)
+            - Motor RPM's (1,2,3,4)
 
                 Actions:
                             Raise                           Forward
@@ -164,18 +175,8 @@ void Drone::update()
     }
 
     if(t_update.tCheck()) { 
-        // Serial.print(throttle);
-        // Serial.print("\t");
-        // Serial.print(yaw);
-        // Serial.print("\t");
-        // Serial.print(roll);
-        // Serial.print("\t");
-        // Serial.print(pitch);
-        // Serial.println("");
-        
-
         // Recieved data from BLE, stored as target_(x,y,z)
-        
+        update(time_passed);
 
         // 1. Calculate PID Gains
         float gain_x = pidx.gain(time_passed, (ax - target_x), gx, throttle > 1200);
@@ -184,9 +185,9 @@ void Drone::update()
 
         // 2. Write to Motors
         for(auto prop : propellers) {
+            // Apply new throttles to each propellor, changing gain for odd or even props.  
             prop.setPropellerSpeed(limit(throttle) + ((prop.location % 2 == 0) ? gain_y : gain_x) - gain_z);
         }
-
 
         t_update.tRun();
     }
@@ -207,7 +208,7 @@ void Drone::update()
     }
 
     // Run any queued tasks in tTaskManager
-    // for(size_t i = 0; i < tasks.size(); i++)
+    // for(size_t i = 0; i < tasks.size(); i++) 
     // {
     //     // Verify Function SHOULD be run.
     //     if(tasks[i].tCheck()) {
@@ -223,8 +224,6 @@ void Drone::update()
     //         } 
     //     }
     // }
-
-
 }
 
 /*
@@ -256,13 +255,33 @@ int Drone::limit(int t) {
     else return t;
 }
 
+void Drone::update(double time_passed) {
+    // Obtain Angular Deltas
+    float dX = (gx * time_passed);
+    float dY = (gy * time_passed);
+    float dZ = (gy * time_passed);
+    
+    // Increment Velocities 
+    vx += dX;
+    vy += dY;
+    vz += dZ;
+
+    // Linearize Velocities 
+    dZ *= DEG_TO_RAD;
+    vx = vx * cos(dZ) + vy * sin(dZ);
+    vy = -vx * sin(dZ) + vy * cos(dZ);
+    
+    // Print to Console
+    Serial.print(time_passed); Serial.print("\t"); Serial.print(vx); Serial.print("\t"); Serial.print(vy); Serial.print("\t");  Serial.println(vz);
+}
+
 int Drone::readCharacteristicValue(BLECharacteristic characteristic) {
     uint8_t value[4] = {};
     int res = 0;
 
     characteristic.readValue(value, 4);
 
-    for(int i = 0; i< 4; i++) {
+    for(int i = 0; i < 4; i++) {
         int val = (int)value[i] - '0';
 
         if(val >= 0) {
@@ -274,9 +293,10 @@ int Drone::readCharacteristicValue(BLECharacteristic characteristic) {
     return res;
 }
 
-int Drone::readCharacteristic(BLECharacteristic characteristic, int prev_value) {
+float Drone::readCharacteristic(BLECharacteristic characteristic, int prev_value) {
     if (characteristic.written()) {
-        return readCharacteristicValue(characteristic) - 200;
+        // 0-400     400*2.5 + 1000  =>  1000-2000
+        return (readCharacteristicValue(characteristic) * 2.5) + 1000;
     }else {
         return prev_value;
     }

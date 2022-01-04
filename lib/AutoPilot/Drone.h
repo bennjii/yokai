@@ -127,7 +127,8 @@ class Drone
         void land();
 
         int limit(int t);
+        void update(double time_passed);
 
         int readCharacteristicValue(BLECharacteristic characteristic);
-        int readCharacteristic(BLECharacteristic characteristic, int prev_value);
+        float readCharacteristic(BLECharacteristic characteristic, int prev_value);
 };
